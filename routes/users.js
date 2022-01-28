@@ -3,28 +3,21 @@ var router = express.Router();
 const jwt = require("jsonwebtoken")
 const Ajv = require("ajv")
 var axios = require('axios');
-const ajv = new Ajv() // options can be passed, e.g. {allErrors: true}
-
+const userController = require("../controller/user.controller");
 const verify = require("../middleware/checkToken")
-const {userLoginSchema, userSignupSchema} = require("../schema/user.schema")
+const userLoginSchema = require("../schema/userLogin.schema")
+const userSignupSchema = require("../schema/userSignup.schema")
 const checkUserExisting = require("../helper/helper")
 
 //login
-router.post('/login', function(req, res, next) {
-  //get data
-  var loginUser = req.body;
-  console.log(loginUser);
+router.post('/login', userController.login);
+//Signup
+router.post('/signup', function(req, res, next) {
+  //get data from body request
+  const user = req.body;
+  console.log(user);
 
-  //validate data
-  const validate = ajv.compile(userLoginSchema)
-  const valid = validate(user)
-
-  if (!valid) {
-    console.log(validate.errors)
-    res.status(400).send('Invalid username or password');
-  }
-
-   // Kiểm tra tài khoản tồn tại
+  //check if user existing
   axios.post(`http://localhost:9200/csdl/users/_search`,
     {
       "query": {
@@ -32,54 +25,37 @@ router.post('/login', function(req, res, next) {
           "must": [
             {
               "match": {
-                "username" : loginUser.username,
-              }
-            },
-            {
-              "match": {
-                "password" : loginUser.password,
+                "username" : user.username,
               }
             }
           ]
         }
       }
     }).then(response => {
-      if(response.data.hits.total.value == 1){
-        
-        // Ký và tạo token
-        const token = jwt.sign({_id: loginUser._id}, process.env.SECRET_TOKEN)
-        res.header("auth-token", token);
-        res.status(200).send({accessToken: token});
+      if(response.data.hits.total.value > 0){
+        //
+        res.status(409).send('Existing');
       }
       else{
-        res.status(400).send("Invalid username or password");
+        //validate data
+        const validate = ajv.compile(userSignupSchema)
+        const valid = validate(user)
+
+        if (!valid) {
+          console.log(validate.errors)
+          res.status(400).send('Invalid');
+        }
+        else{
+          // Ký và tạo token
+          const token = jwt.sign({_id: user._id}, process.env.SECRET_TOKEN)
+          res.header("auth-token", token);
+          axios.post(`http://localhost:9200/csdl/users/`,user).then(response => res.status(201).json({accessToken: token}));
+        }
       }
     });
 });
-//Signup
-router.post('/signup', function(req, res, next) {
-  //get data from body request
-  const user = req.body;
-  console.log(user);
 
-  //validate data
-  const validate = ajv.compile(userSignupSchema)
-  const valid = validate(user)
 
-  if (!valid) {
-    console.log(validate.errors)
-    res.status(400).send('Invalid');
-  }
-  else if(checkUserExisting(user)){
-    res.status(409).send('Existing');
-  }
-  else{
-     // Ký và tạo token
-    const token = jwt.sign({_id: loginUser._id}, process.env.SECRET_TOKEN)
-    res.header("auth-token", token);
-    axios.post(`http://localhost:9200/csdl/users/`,user).then(response => res.status(201).json({status: response.data.created}));
-  }
-});
 //review token to auto login
 router.post('/renew', function(req, res, next) {
   var loginUser = req.body;

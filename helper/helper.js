@@ -1,4 +1,5 @@
-module.exports = function checkUserExisting(user){
+var axios = require('axios');
+module.exports = async function checkUserExisting(user){
     axios.post(`http://localhost:9200/csdl/users/_search`,
     {
       "query": {
@@ -13,11 +14,11 @@ module.exports = function checkUserExisting(user){
         }
       }
     }).then(response => {
-      if(response.data.hits.total.value >= 1){
-        return false;
+      if(response.data.hits.total.value > 0){
+        return true;
       }
       else{
-        return true;
+        return false;
       }
     });
 }
